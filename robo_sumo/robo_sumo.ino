@@ -14,10 +14,12 @@ const int arena = 60;
 
 void go_forward();
 void go_backward();
-void turn(int direcao);
+void turn(char direcao);
+
+void attack();
+void look_for_enemy();
 
 bool identify_enemy();
-bool identify_edge();
 
 Ultrasonic ultrasonic(7, 6);
 
@@ -36,8 +38,14 @@ void setup()
 
 void loop()
 {
-  // put your main code here, to run repeatedly:
-
+  if(!identify_enemy())
+  {
+    look_for_enemy();
+  }
+  else
+  {
+    attack();
+  }
 }
 
 void go_forward()
@@ -58,9 +66,9 @@ void go_backward()
   digitalWrite(M2B, 0);
 }
 
-void turn(int direcao)
+void turn(char direcao)
 {
-  if (direcao == 0)
+  if (direcao == 'r')
   {
     digitalWrite(M1A, 1);
     digitalWrite(M2A, 0);
@@ -75,6 +83,85 @@ void turn(int direcao)
 
     digitalWrite(M1B, 0);
     digitalWrite(M2B, 1);
+  }
+}
+
+void attack()
+{
+  bool frs = !digitalRead(FRS);
+  bool fls = !digitalRead(FLS);
+  if (!frs && !fls)
+  {
+    go_forward();
+  }
+}
+
+bool left_turn = false;
+bool right_turn = false;
+
+unsigned int turn_time = 0;
+bool may_have_enemy = true;
+int tolerance_time = 6000;
+
+void look_for_enemy()
+{
+  bool brs = !digitalRead(BRS);
+  bool bls = !digitalRead(BLS);
+  bool frs = !digitalRead(FRS);
+  bool fls = !digitalRead(FLS);
+
+  // evitar cair
+  if (brs && bls) // ambos traseiros
+  {
+    go_forward();
+  }
+
+  if (frs && fls) // ambos dianteiros
+  {
+    go_backward();
+  }
+
+  if (may_have_enemy)
+  {
+    //busca de fato
+    if (!left_turn && !right_turn)
+    {
+      turn_time = millis();
+    }
+    
+    if (!bls && !fls && !left_turn)
+    {
+      turn('l');
+    }
+    else
+    {
+      left_turn = true;
+      turn_time = millis();
+    }
+    
+    if (!brs && !frs && !right_turn && left_turn)
+    {
+      turn('r');
+    }
+    else
+    {
+      right_turn = true;
+    }
+    
+    if (left_turn && right_turn)
+    {
+      turn('l');
+      delay(turn_time/2);
+      go_forward();
+      delay(500);
+      left_turn = false;
+      right_turn = false;
+    }
+
+    if (turn_time >= tolerance_time)
+    {
+      may_have_enemy = false;
+    }
   }
 }
 
