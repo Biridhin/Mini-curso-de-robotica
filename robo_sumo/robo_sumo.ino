@@ -1,173 +1,104 @@
 #include <Ultrasonic.h> //https://github.com/ErickSimoes/Ultrasonic
 
+// Motor
 #define M1A 2
 #define M2A 3
 #define M1B 4
 #define M2B 5
 
-#define BRS 8  // back right sensor
-#define BLS 9  // back left sensor
-#define FRS 10 // front right sensor
-#define FLS 11 // front left sensor
+// Sensor de linha
+#define BR A0
+#define BL A1
+#define FL A2
+#define FR A3
 
-const int arena = 60;
+// Ultrassom
+#define trigger 7
+#define echo 6
 
-void go_forward();
-void go_backward();
-void turn(char direcao);
+Ultrasonic ultrasonic(trigger, echo);
+const int field_of_view = 30;
 
+//==================================================================
+class Sensor
+{
+  private:
+    int base_value;
+    int pin;
+    int tolerance;
+  public:
+    Sensor(int pin, int tolerance)
+    {
+      this->base_value = analogRead(pin);
+      this->pin = pin;
+      this->tolerance = tolerance;
+    }
+
+    bool find_line()
+    {
+      int current_value = analogRead(pin);
+      if (abs(base_value - current_value) >= tolerance)
+      {
+        return true;
+      }
+      else
+      {
+        return false;
+      }
+    }
+};
+
+
+void go_direction(char direcao);
 void attack();
 void look_for_enemy();
 
 bool identify_enemy();
 
-Ultrasonic ultrasonic(7, 6);
+void debug_line_sensor();
+void debug_ultrasonic_sensor();
 
+//==================================================================
 void setup()
 {
-  pinMode(2, OUTPUT);
-  pinMode(3, OUTPUT);
-  pinMode(4, OUTPUT);
-  pinMode(5, OUTPUT);
+  pinMode(M1A, OUTPUT);
+  pinMode(M2A, OUTPUT);
+  pinMode(M1B, OUTPUT);
+  pinMode(M2B, OUTPUT);
 
-  pinMode(8, INPUT);
-  pinMode(9, INPUT);
-  pinMode(10, INPUT);
-  pinMode(11, INPUT);
+  pinMode(BR, INPUT);
+  pinMode(BL, INPUT);
+  pinMode(FR, INPUT);
+  pinMode(FL, INPUT);
+
+  Serial.begin(9600);
 }
 
+Sensor BRS(BR, 50);
+Sensor BLS(BL, 50);
+Sensor FRS(FR, 50);
+Sensor FLS(FL, 50);
+
+//==================================================================
 void loop()
 {
-  if(!identify_enemy())
-  {
-    look_for_enemy();
-  }
-  else
+  if (identify_enemy())
   {
     attack();
   }
-}
-
-void go_forward()
-{
-  digitalWrite(M1A, 1);
-  digitalWrite(M2A, 0);
-
-  digitalWrite(M1B, 0);
-  digitalWrite(M2B, 1);
-}
-
-void go_backward()
-{
-  digitalWrite(M1A, 0);
-  digitalWrite(M2A, 1);
-
-  digitalWrite(M1B, 1);
-  digitalWrite(M2B, 0);
-}
-
-void turn(char direcao)
-{
-  if (direcao == 'r')
-  {
-    digitalWrite(M1A, 1);
-    digitalWrite(M2A, 0);
-
-    digitalWrite(M1B, 1);
-    digitalWrite(M2B, 0);
-  }
   else
   {
-    digitalWrite(M1A, 0);
-    digitalWrite(M2A, 1);
-
-    digitalWrite(M1B, 0);
-    digitalWrite(M2B, 1);
+    look_for_enemy();
   }
+
+  //debug_line_sensor();
+  //debug_ultrasonic_sensor();
 }
 
-void attack()
-{
-  bool frs = !digitalRead(FRS);
-  bool fls = !digitalRead(FLS);
-  if (!frs && !fls)
-  {
-    go_forward();
-  }
-}
-
-bool left_turn = false;
-bool right_turn = false;
-
-unsigned int turn_time = 0;
-bool may_have_enemy = true;
-int tolerance_time = 6000;
-
-void look_for_enemy()
-{
-  bool brs = !digitalRead(BRS);
-  bool bls = !digitalRead(BLS);
-  bool frs = !digitalRead(FRS);
-  bool fls = !digitalRead(FLS);
-
-  // evitar cair
-  if (brs && bls) // ambos traseiros
-  {
-    go_forward();
-  }
-
-  if (frs && fls) // ambos dianteiros
-  {
-    go_backward();
-  }
-
-  if (may_have_enemy)
-  {
-    //busca de fato
-    if (!left_turn && !right_turn)
-    {
-      turn_time = millis();
-    }
-    
-    if (!bls && !fls && !left_turn)
-    {
-      turn('l');
-    }
-    else
-    {
-      left_turn = true;
-      turn_time = millis();
-    }
-    
-    if (!brs && !frs && !right_turn && left_turn)
-    {
-      turn('r');
-    }
-    else
-    {
-      right_turn = true;
-    }
-    
-    if (left_turn && right_turn)
-    {
-      turn('l');
-      delay(turn_time/2);
-      go_forward();
-      delay(500);
-      left_turn = false;
-      right_turn = false;
-    }
-
-    if (turn_time >= tolerance_time)
-    {
-      may_have_enemy = false;
-    }
-  }
-}
-
+//==================================================================
 bool identify_enemy()
 {
-  if (ultrasonic.read(CM) <= arena)
+  if (ultrasonic.read(CM) <= field_of_view)
   {
     return true;
   }
@@ -177,11 +108,127 @@ bool identify_enemy()
   }
 }
 
-bool identity_edge()
+//==================================================================
+void attack()
 {
-  bool brs = !digitalRead(BRS);
-  bool bls = !digitalRead(BLS);
-  bool frs = !digitalRead(FRS);
-  bool fls = !digitalRead(FLS);
-  return brs || bls || frs || fls;
+  if (!FRS.find_line() and !FLS.find_line())
+  {
+    go_direction('f');
+  }
+  else
+  {
+    go_direction('p');
+  }
+}
+
+//==================================================================
+bool left_turn = false;
+bool right_turn = false;
+unsigned int turn_time = 0;
+void look_for_enemy()
+{
+  if (!BRS.find_line() and !FLS.find_line() and !left_turn)
+  {
+    go_direction('l');
+  }
+  else if (!left_turn)
+  {
+    go_direction('p');
+    left_turn = true;
+    turn_time = millis();
+  }
+  
+  if (!BLS.find_line() and !FRS.find_line() and left_turn and !right_turn)
+  {
+    go_direction('r');
+  }
+  else if (!right_turn)
+  {
+    go_direction('p');
+    right_turn = true;
+    
+  }
+
+  if (left_turn and right_turn)
+  {
+    go_direction('l');
+    delay((millis() - turn_time));
+    go_direction('p');
+    delay(50);
+    go_direction('f');
+    delay(500);
+    go_direction('p');
+    left_turn = false;
+    right_turn = false;
+  }
+}
+
+//==================================================================
+void go_direction(char direcao)
+{
+  if (direcao == 'f')
+  {
+    digitalWrite(M1A, 0);
+    digitalWrite(M2A, 1);
+
+    digitalWrite(M1B, 0);
+    digitalWrite(M2B, 1);
+  }
+  else if (direcao == 'b')
+  {
+    digitalWrite(M1A, 1);
+    digitalWrite(M2A, 0);
+
+    digitalWrite(M1B, 1);
+    digitalWrite(M2B, 0);
+  }
+  else if (direcao == 'r')
+  {
+    digitalWrite(M1A, 1);
+    digitalWrite(M2A, 0);
+
+    digitalWrite(M1B, 0);
+    digitalWrite(M2B, 1);
+  }
+  else if (direcao == 'l')
+  {
+    digitalWrite(M1A, 0);
+    digitalWrite(M2A, 1);
+
+    digitalWrite(M1B, 1);
+    digitalWrite(M2B, 0);
+  }
+  else if (direcao == 'p')
+  {
+    digitalWrite(M1A, 0);
+    digitalWrite(M2A, 0);
+
+    digitalWrite(M1B, 0);
+    digitalWrite(M2B, 0);
+  }
+}
+
+//==================================================================
+void debug_line_sensor()
+{
+  Serial.print("BR: ");
+  Serial.print(analogRead(BR));
+  Serial.print("  BL: ");
+  Serial.print(analogRead(BL));
+  Serial.print("  FR: ");
+  Serial.print(analogRead(FR));
+  Serial.print("  FL: ");
+  Serial.println(analogRead(FL));
+  delay(500);
+}
+
+//==================================================================
+void debug_ultrasonic_sensor()
+{
+  Serial.print("Distância(CM): ");
+  Serial.print(ultrasonic.read(CM));
+  Serial.print(" cm  ");
+  Serial.print("Identified enemy: ");
+  Serial.println(identify_enemy());
+  delay(500);
 }
